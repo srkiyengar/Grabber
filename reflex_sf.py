@@ -28,6 +28,8 @@ MAX_PRESHAPE_MOVEMENT = 1550
 
 MAX_SPEED = 200 # A max speed of 1023 is allowed
 
+REPORT_PALM_POSITIONS = 1  #To report finger positions using A3 movement of joystick
+
 #logger
 LOG_LEVEL = logging.DEBUG
 LOG_FILENAME = 'Grabber' + datetime.now().strftime('%Y-%m-%d---%H:%M:%S')
@@ -240,6 +242,13 @@ class reflex_sf():
             rest_position = self.finger[i]["lower_limit"]
             F.append(rest_position)
         return F
+    def get_max_position(self):
+        F=[]
+        F.append(0)
+        for i in range(1,5,1):
+            max_position = self.finger[i]["upper_limit"]
+            F.append(max_position)
+        return F
 
 # Define some colors
 BLACK    = (   0,   0,   0)
@@ -333,7 +342,7 @@ if __name__ == '__main__':
     size = [500, 700]
     screen = pygame.display.set_mode(size)
 
-    pygame.display.set_caption("Reflex_SF Commands")
+    pygame.display.set_caption("Reflex_SF JoyStick Movements")
 
     #Setup Webcam for manual focus with focus setting to 1 (It can be set to 1 to 27)
     my_cam = ic.webcam(1,0,1) #Camera =1, Autofocus = 0, focus setting = 1
@@ -358,7 +367,8 @@ if __name__ == '__main__':
     Num_Axes = j_device.axes
     Num_Hats =j_device.hats
 
-
+    palm_position_reporting = REPORT_PALM_POSITIONS #while using Joystick A3 = 1, we want only one print out
+    old_datafile = ""                         #to close previous data file
 
     for i in range (Num_Buttons):
         Buttons.append(0)
@@ -458,12 +468,22 @@ if __name__ == '__main__':
                         my_logger.debug("No YCB object")
                     else:
                         one_datafile = cd.data(my_ycb_object)
-                        if my_cam.capture_and_save_frame(one_datafile.filename) == 0:
-                            raise RuntimeError('Exiting the program')
+                        finger_file = one_datafile.filename
+                        if my_cam.capture_and_save_frame(finger_file) == 0:
+                            raise RuntimeError('Exiting the program - Webcam capture and save failed')
                         else:
-                            pass
+                            my_logger.info("Opening Grabber Finger movement recording in File {}:".format(finger_file))
+                            if old_datafile:
+                                finger_file_fp.close()
+                            try:
+                                finger_file_fp = open(one_datafile.filename,"w")
+                                old_datafile = finger_file
+                            except IOError:
+                                my_logger.info("Failure to File {}:".format(finger_file))
+                                raise IOError ("Unable to open file for Grabber Finger position recording")
+                            finger_file_fp.write("Data file: "+finger_file)
                 else:
-                    pass
+                     pass
             else:
                 pass # ignoring other event types
 
@@ -482,8 +502,16 @@ if __name__ == '__main__':
                         my_logger.info("Joy Axis {} +ive Value {},moveby {}".format(k,position,move_goal[k]))
                         palm.space_finger1_and_finger2(move_goal[k],direction)
                     elif k ==3:
-                        F = palm.get_rest_position()
-                        my_logger.info("Rest Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
+                        if palm_position_reporting:
+                            F = palm.get_rest_position()
+                            my_logger.info("Rest Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
+                            F = palm.get_palm_current_position()
+                            my_logger.info("Current Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
+                            F= palm.get_max_position()
+                            my_logger.info("Max Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
+                            palm_position_reporting = 0
+                        else:
+                            pass
             elif position < 0:
                 if position < min_val[k]:
                     direction = -1
@@ -496,6 +524,8 @@ if __name__ == '__main__':
                         my_logger.info("Joy Axis {} -ive Value {},moveby {}".
                                        format(k,position,move_goal[k]))
                         palm.space_finger1_and_finger2(move_goal[k],direction)
+                    elif k==3:
+                        palm_position_reporting = 1
             else:
                 pass
 
@@ -531,6 +561,8 @@ if __name__ == '__main__':
 
 my_cam.close_video()
 pygame.quit ()
+if not old_datafile:
+    finger_file_fp.close()
 
 
 
