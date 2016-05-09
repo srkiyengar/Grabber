@@ -13,12 +13,6 @@ LOG_LEVEL = logging.DEBUG
 my_logger = logging.getLogger("My_Logger")
 
 
-
-# Open video device
-
-os.system("v4l2-ctl -d /dev/video1 --set-ctrl focus_auto=0")
-os.system("v4l2-ctl -d /dev/video1 --set-ctrl focus_absolute=1")
-
 class webcam:
     def __init__( self, cam_identifier, focus_type, focus_value):
 
@@ -28,12 +22,18 @@ class webcam:
             cam_identifier = 0
         input_string = "v4l2-ctl -d /dev/video"+str(cam_identifier)+" --set-ctrl focus_auto="+str(focus_type)
         my_logger.info("Setting to manual-focus: {}".format(input_string))
-        os.system(input_string)
-
-        if focus_type == 0:
-            input_string = "v4l2-ctl -d /dev/video"+str(cam_identifier)+" --set-ctrl focus_absolute="+str(1)
-            my_logger.info("Focus value: {}".format(input_string))
-            os.system(input_string)
+        if (os.system(input_string) != 0):
+            self.camera = 0
+        else:
+            if focus_type == 0:
+                input_string = "v4l2-ctl -d /dev/video"+str(cam_identifier)+" --set-ctrl focus_absolute="+str(1)
+                my_logger.info("Focus value: {}".format(input_string))
+                if (os.system(input_string) != 0):
+                    self.camera = 0
+                else:
+                    self.camera = 1
+            else:
+                self.camera = 1
 
 
     def capture_and_save_frame(self,filename):

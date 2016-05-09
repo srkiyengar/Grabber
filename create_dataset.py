@@ -25,7 +25,7 @@ class dataset:
     def __init__(self):
         self.data = []
         self.timestamp = time.localtime()
-        my_logger.info("Dataset creating begun at " + time.strftime("%d-%b-%Y %H:%M:%S", time.localtime()))
+        my_logger.info("******Dataset creation begun at " + time.strftime("%d-%b-%Y %H:%M:%S", time.localtime()) + "***")
         some_random_number = random.randrange(MIN_RANDOM_NUMBER_DATASET,MAX_RANDOM_NUMBER_DATASET)
         self.data_batch = some_random_number # will not be changed
         self.counter = 0
@@ -51,7 +51,7 @@ class ycb_object_dataset:
         creation_time = time.strftime("%d-%b-%Y %H:%M:%S", time.localtime())
         self.object_id = my_dataset.get_object_id()
         self.batch = my_dataset.data_batch
-        my_logger.info("{} - Inserted-Batch: {} object: {}".format(creation_time,
+        my_logger.info("*******Inserted {} Batch: {} object: {} ************".format(creation_time,
                                                                     self.batch,self.object_id))
         self.file_counter = 0
         my_dataset.append(self)
