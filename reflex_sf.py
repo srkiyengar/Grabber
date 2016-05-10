@@ -10,6 +10,7 @@ import logging
 import logging.handlers
 import create_dataset as cd
 import image_capture as ic
+import tcp_client as tc
 
 
 
@@ -359,6 +360,9 @@ if __name__ == '__main__':
     # a flag to print and stop printing finger positions to data file
     set_record = 0
 
+    #setup labview connection
+    my_command = tc.command_labview('192.168.10.2', 5000)
+
     # Used to manage how fast the screen updates
     clock = pygame.time.Clock()
 
@@ -502,7 +506,7 @@ if __name__ == '__main__':
                                 my_logger.info("Image file created :{}"+".png".format(finger_file))
                         else:
                             my_logger.info("Camera setting failure : ".format(finger_file))
-
+                        my_command.start_collecting(finger_file)
                 if Hat[0] == 1:
                     if set_record == 1:
                         F = palm.get_palm_current_position()
@@ -510,6 +514,7 @@ if __name__ == '__main__':
                         finger_file_fp.write("End position\n")
                         finger_file_fp.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
                         set_record == 0
+                        my_command.stop_collecting()
                     else:
                         pass
             else:
@@ -606,6 +611,7 @@ my_cam.close_video()
 pygame.quit ()
 if old_datafile:        #when no batch is created, the program won't try to close a non-existant file handle
     finger_file_fp.close()
+my_command.destroy()    #close socket
 
 
 
