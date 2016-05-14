@@ -3,6 +3,8 @@ __author__ = 'srkiyengar'
 import socket
 import logging
 import struct
+import datetime
+
 
 LOG_LEVEL = logging.DEBUG
 
@@ -39,13 +41,42 @@ class make_connection:
                 raise RuntimeError("socket connection broken")
             total = total + sent
 
+    def receive_data(self,how_many):
+
+        received_data = []
+        bytes_recd = 0
+        while bytes_recd < how_many:
+            chunk = self.sock.recv((how_many - bytes_recd), 2048)
+            if chunk == '':
+                raise RuntimeError("socket connection broken")
+            received_data.append(chunk)
+            bytes_recd = bytes_recd + len(chunk)
+        return ''.join(received_data)
+
 
 class command_labview:
 
         def __init__(self, host, port=5000):
+
             self.my_connection = make_connection()
             self.my_connection.connect(host,port)
             self.datafile = ""
+
+        def exchange_time(self, time_str):
+
+            #my_logger.info("Starting Time: {}".format(datetime.datetime.now()))
+            l = len(time_str)
+            format_str = "BB"+str(l)+"s"
+            send_str = struct.pack(format_str,6,l,time_str)
+            self.my_connection.send_data(send_str)
+            #my_logger.info("After Sending the Time is: {}".format(datetime.datetime.now()))
+            response_header = self.my_connection.receive_data(2)
+            #my_logger.info("Response header received at time: {}".format(datetime.datetime.now()))
+            c = ord(response_header[1])
+            response_str = self.my_connection.receive_data(c)
+            #my_logger.info("Response string received at time: {}".format(datetime.datetime.now()))
+            return response_str
+
 
         def start_collecting(self,filename):
             self.datafile = filename

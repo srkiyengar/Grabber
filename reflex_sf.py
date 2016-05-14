@@ -17,10 +17,10 @@ import tcp_client as tc
 JOY_DEADZONE_A0 = 0.2
 JOY_DEADZONE_A1 = 0.1
 
-SCAN_RATE = 20           #1 second divided by scan rate is t he joystick scanning
+SCAN_RATE = 100           #1 second divided by scan rate is t he joystick scanning
 POS_ERROR = 20
 
-MOVE_TICKS = 200
+MOVE_TICKS = 300
 CALIBRATION_TICKS = 50
 
 
@@ -119,9 +119,15 @@ class reflex_sf():
         return 1
 
     def get_palm_current_position(self): #Returns a list of current position
+        current_position = [0,0,0,0,0]
+        for i in range(1,5,1):
+            current_position[i] = self.finger[i]["CP"]
+        return current_position
+
+    def read_servo_current_location(self):
         current_location = [0,0,0,0,0]
         for i in range(1,5,1):
-            current_location[i] = self.finger[i]["CP"]
+            current_location[i] = self.finger_current_position(i)
         return current_location
 
     def is_finger_within_limit(self, id, new_position):
@@ -164,9 +170,9 @@ class reflex_sf():
         return load, rotation
 
     def move_finger_delta(self, id, move_direction,increment): # direction +1 = finger closing; -1 = finger opening
-        #p = self.finger[id]["CP"]
-        p = self.finger[id]["servo"].read_current_position()
-        my_logger.debug('Finger {} position from Servo {}'.format(id,p))
+        p = self.finger[id]["CP"]
+        #p = self.finger[id]["servo"].read_current_position()
+        #my_logger.debug('Finger {} position from Servo {}'.format(id,p))
         q = self.finger[id]["rotation"]
         q *= move_direction
         new_position = p + q*increment
@@ -193,11 +199,13 @@ class reflex_sf():
             self.move_finger_delta(i,grip,move_by)
 
         #updating CP to match current position
-        for i in range(1,4,1):
-            p = self.finger[i]["CP"]
-            q = self.finger[i]["servo"].read_current_position()
-            my_logger.debug('Finger {} should at {} and it is at {}'.format(i,p,q))
-            self.finger[i]["CP"] = q
+        #for i in range(1,4,1):
+            #p = self.finger[i]["CP"]
+            #q = self.finger[i]["servo"].read_current_position()
+            #q = self.finger_current_position(i)
+            #my_logger.debug('Finger {} should at {} and it is at {}'.format(i,p,q))
+            #self.finger[i]["CP"] = q
+
         if recording is not None:
             F = self.get_palm_current_position()
             file_pointer.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
@@ -363,6 +371,17 @@ if __name__ == '__main__':
     #setup labview connection
     my_command = tc.command_labview('192.168.10.2', 5000)
 
+    for m in range(1,6,1):
+        my_logger.info("Attempt # {}".format(m))
+        before_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        response_str = my_command.exchange_time(before_time_str)
+        after_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        my_logger.info("Before Laptop Time: {}".format(before_time_str))
+        my_logger.info("Desktop Response: {}".format(response_str))
+        my_logger.info("After Laptop Time: {}".format(after_time_str))
+
+
+
     # Used to manage how fast the screen updates
     clock = pygame.time.Clock()
 
@@ -373,7 +392,7 @@ if __name__ == '__main__':
     # Get count of joystick
     Buttons = []
     Num_Buttons = j_device.buttons
-    Axes = []   #mainly for the screen display
+
     min_val = [-JOY_DEADZONE_A0,-JOY_DEADZONE_A1,0,0]
     max_val = [JOY_DEADZONE_A0,JOY_DEADZONE_A1,0,0]
 
@@ -386,12 +405,14 @@ if __name__ == '__main__':
     for i in range (Num_Buttons):
         Buttons.append(0)
 
+    Axes = []   #mainly for the screen display
     for i in range (Num_Axes):
         Axes.append(0.00)
 
-
     move_goal = [0,0,0,0]
     Hat = (0,0)
+    joy_move = [0,0,0,0]
+    direction = [0,0,0,0]
 
     #Loop until the user clicks the close button.
     done = False
@@ -441,14 +462,21 @@ if __name__ == '__main__':
                     sid = 4
                     grip = -1
                     palm.manual_move_finger_to_position(sid,grip)
+
+
                 elif Buttons[1] == 1:
-                    fingers = palm.get_palm_current_position()
-                    my_logger.info("Current Finger Positions F1-{} F2-{} F3-{} F4-{}".format
-                    (fingers[1],fingers[2],fingers[3],fingers[4]))
-                elif Buttons[0] == 1:
                     palm.move_to_rest_position()
                     fingers = palm.get_palm_current_position()
                     my_logger.info("Finger Rest Positions F1-{} F2-{} F3-{} F4-{}".format
+                    (fingers[1],fingers[2],fingers[3],fingers[4]))
+
+                    fingers = palm.read_servo_current_location()
+                    my_logger.info("Servo Rest Positions F1-{} F2-{} F3-{} F4-{}".format
+                    (fingers[1],fingers[2],fingers[3],fingers[4]))
+
+                elif Buttons[0] == 1:
+                    fingers = palm.get_palm_current_position()
+                    my_logger.info("Current Finger Positions F1-{} F2-{} F3-{} F4-{}".format
                     (fingers[1],fingers[2],fingers[3],fingers[4]))
                 elif Buttons[4] and Buttons[5]:
                     my_logger.info("New Finger positions - calibration")
@@ -495,7 +523,14 @@ if __name__ == '__main__':
                         finger_file_fp.write("Data file: "+finger_file+"\n")
                         palm.move_to_rest_position()
                         set_record = 1
+
+                        t1 = datetime.now()
                         F = palm.get_palm_current_position()
+                        t2 = datetime.now()
+                        t = (t2-t1)
+                        my_logger.info("Time T1: {} T2: {} Diff s:{} microsecond:{} "\
+                                       .format(t1,t2,t.seconds,t.microseconds))
+
                         my_logger.info("Finger Rest Positions F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
                         finger_file_fp.write("Start position\n")
                         finger_file_fp.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
@@ -510,10 +545,13 @@ if __name__ == '__main__':
                 if Hat[0] == 1:
                     if set_record == 1:
                         F = palm.get_palm_current_position()
-                        my_logger.info("Finger Grab position F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
+                        my_logger.info("Grabber position F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
                         finger_file_fp.write("End position\n")
                         finger_file_fp.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
-                        set_record == 0
+                        F = palm.read_servo_current_location()
+                        my_logger.info("Servo position M1-{} M2-{} M3-{} M4-{}".format(F[1],F[2],F[3],F[4]))
+                        finger_file_fp.write("M1-"+ str(F[1])+",M2-"+str(F[2])+",M3-"+ str(F[3])+",M4-"+str(F[2])+"\n")
+                        set_record = 0
                         my_command.stop_collecting()
                     else:
                         pass
@@ -521,26 +559,17 @@ if __name__ == '__main__':
                 pass # ignoring other event types
 
         # Event less state monitoring of Joy axis positions
-        for k in range(0,Num_Axes,1):
+        for k in range(0, Num_Axes, 1):
             Axes[k] = j_device.joystick.get_axis(k)
-            position = Axes[k]
-            if position > 0:
-                if position > max_val[k]:
-                    direction = 1
-                    move_goal[k] = int(position*MOVE_TICKS)
+            if Axes[k] > 0:
+                if Axes[k] > max_val[k]:
+                    direction[k] = 1
+                    move_goal[k] = int(Axes[k]*MOVE_TICKS)
                     if k == 1:
-                        my_logger.info("Joy Axis {} +ive Value {},moveby {}".format(k,position,move_goal[k]))
-                        if old_datafile:
-                            palm.grip_fingers(move_goal[k],direction,set_record,finger_file_fp)
-                        else:
-                            palm.grip_fingers(move_goal[k],direction)
-                    elif k==0:
-                        my_logger.info("Joy Axis {} +ive Value {},moveby {}".format(k,position,move_goal[k]))
-                        if old_datafile:
-                            palm.space_finger1_and_finger2(move_goal[k],direction,set_record,finger_file_fp)
-                        else:
-                            palm.space_finger1_and_finger2(move_goal[k],direction)
-                    elif k ==3:
+                        joy_move[1] = 1
+                    elif k == 0:
+                        joy_move[0] = 1
+                    elif k == 3:
                         if A3_palm_position_reporting:
                             F = palm.get_rest_position()
                             my_logger.info("Rest Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
@@ -550,31 +579,43 @@ if __name__ == '__main__':
                             my_logger.info("Max Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
                             A3_palm_position_reporting = 0
                         else:
-                            pass # not logging A3_palm_position
+                            pass    # not logging A3_palm_position
                     else:
-                        pass # end of checking k values (0,1,3) for positive displacement
-            elif position < 0:
-                if position < min_val[k]:
-                    direction = -1
-                    move_goal[k] = int(abs(position)*MOVE_TICKS)
+                        pass    # end of checking k values (0,1,3) for positive displacement
+            elif Axes[k] < 0:
+                if Axes[k] < min_val[k]:
+                    direction[k] = -1
+                    move_goal[k] = int(abs(Axes[k])*MOVE_TICKS)
                     if k == 1:
-                        my_logger.info("Joy Axis {} -ive Value {},moveby {}".format(k,position,move_goal[k]))
-                        if old_datafile:
-                            palm.grip_fingers(move_goal[k],direction,set_record,finger_file_fp)
-                        else:
-                            palm.grip_fingers(move_goal[k],direction)
+                        joy_move[1]=1
                     elif k == 0:
-                        my_logger.info("Joy Axis {} -ive Value {},moveby {}".format(k,position,move_goal[k]))
-                        if old_datafile:
-                            palm.space_finger1_and_finger2(move_goal[k],direction,set_record,finger_file_fp)
-                        else:
-                            palm.space_finger1_and_finger2(move_goal[k],direction)
+                        joy_move[0]=1
                     elif k==3:
                         palm_position_reporting = 1
                     else:
                         pass # end of checking k values (0,1,3) for negative displacement
             else:
                 pass
+
+        k = 1   #Servo 1,2,3
+        if joy_move[k] == 1:
+            joy_move[k] = 0
+            my_logger.info("Joy Axis displacement: {}, Direction: {}, M1-M2-M3 moveby: {}".
+                           format(Axes[k], direction[k], move_goal[k]))
+            if old_datafile:
+                palm.grip_fingers(move_goal[k],direction[k],set_record,finger_file_fp)
+            else:
+                palm.grip_fingers(move_goal[k],direction[k])
+
+        k = 0   #Servo 4
+        if joy_move[k] == 1:
+            joy_move[k] = 0
+            my_logger.info("Joy Axis displacement: {}, Direction: {}, M4 moveby: {}".
+                           format(Axes[k], direction[k], move_goal[k]))
+            if old_datafile:
+                palm.space_finger1_and_finger2(move_goal[k],direction[k],set_record,finger_file_fp)
+            else:
+                palm.space_finger1_and_finger2(move_goal[k],direction[k])
 
 
         textPrint.Screenprint(screen, "Joystick name: {}".format(j_device.name))
