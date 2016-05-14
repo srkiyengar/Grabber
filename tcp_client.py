@@ -77,6 +77,12 @@ class command_labview:
             #my_logger.info("Response string received at time: {}".format(datetime.datetime.now()))
             return response_str
 
+        def send_unimplemented_command(self):
+            some_string = "nothing"
+            l = len(some_string)
+            format_str = "BB"+str(l)+"s"
+            end_str = struct.pack(format_str,4,l,some_string)
+            self.my_connection.send_data(end_str)
 
         def start_collecting(self,filename):
             self.datafile = filename
@@ -98,7 +104,7 @@ class command_labview:
             format_str = "BB"+str(l)+"s"
             end_str = struct.pack(format_str,6,l,filename)
             self.my_connection.send_data(end_str)
-            self.my_connection.send_data(end_str)       #Yest the labivew requires two - needs debugging
+            self.my_connection.send_data(end_str)       #the labivew seems to requires two for while loop shutdonw - needs debugging
 
         def destroy(self):
             self.my_connection.end_socket()

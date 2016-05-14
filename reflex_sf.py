@@ -20,7 +20,7 @@ JOY_DEADZONE_A1 = 0.1
 SCAN_RATE = 100           #1 second divided by scan rate is t he joystick scanning
 POS_ERROR = 20
 
-MOVE_TICKS = 300
+MOVE_TICKS = 250
 CALIBRATION_TICKS = 50
 
 
@@ -118,6 +118,7 @@ class reflex_sf():
             my_logger.debug('Finger {} Lower Limit {} -- Upper Limit {}'.format(i,x,y))
         return 1
 
+
     def get_palm_current_position(self): #Returns a list of current position
         current_position = [0,0,0,0,0]
         for i in range(1,5,1):
@@ -179,7 +180,7 @@ class reflex_sf():
         move_to = self.is_finger_within_limit(id,new_position)
         #my_logger.debug('After - Finger {} - CP {}'.format(id,move_to))
         if move_to > 0:
-            my_logger.info("Finger{}: MoveFrom: {} To: {} - LimitedTo: {}".format(id,p,new_position,move_to))
+            my_logger.info("Finger {}: MoveFrom: {} To: {} - LimitedTo: {}".format(id,p,new_position,move_to))
             #my_logger.info('Finger {} - Moving From Position {} to Position {}'.format(id,p,move_to))
             self.finger[id]["servo"].set_goal_position(move_to) # return data to make the program wait
             self.finger[id]["CP"] = move_to     # new_position when out of bounds will be modified. Therefore
@@ -242,10 +243,10 @@ class reflex_sf():
         return move_to
 
     def move_to_rest_position(self):
-        current_position = self.get_palm_current_position()
+        current_position = self.read_servo_current_location()
         for i in range(1,5,1):
             rest_position = self.finger[i]["lower_limit"]
-            my_logger.info("Moving From {} to Rest position {}".format(current_position[i],rest_position))
+            my_logger.info("Moving  Servo {} From {} to Rest position {}".format(i, current_position[i],rest_position))
             self.finger[i]["servo"].set_goal_position(rest_position)
             self.finger[i]["CP"] = rest_position
         return
@@ -370,6 +371,8 @@ if __name__ == '__main__':
 
     #setup labview connection
     my_command = tc.command_labview('192.168.10.2', 5000)
+
+    # my_command.send_unimplemented_command()     # does nothing
 
     for m in range(1,6,1):
         my_logger.info("Attempt # {}".format(m))
