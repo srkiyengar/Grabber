@@ -20,7 +20,8 @@ JOY_DEADZONE_A1 = 0.1
 SCAN_RATE = 100           #1 second divided by scan rate is t he joystick scanning
 POS_ERROR = 20
 
-MOVE_TICKS = 350
+MOVE_TICKS = 250
+MOVE_TICKS_SERVO4 = 150
 CALIBRATION_TICKS = 50
 
 
@@ -30,6 +31,7 @@ MAX_PRESHAPE_MOVEMENT = 1550
 MAX_SPEED = 200 # A max speed of 1023 is allowed
 
 REPORT_PALM_POSITIONS = 1  #To report finger positions using A3 movement of joystick
+SET_OBJECT_ID_FLAG = 1 # using Axis 2 of Joystick
 
 #logger
 LOG_LEVEL = logging.DEBUG
@@ -132,10 +134,10 @@ class reflex_sf():
             current_position[i] = self.finger[i]["CP"]
         return current_position
 
-    def read_servo_current_location(self):  #This is from Servo Motor readings without testing if they are moving
+    def read_servo_current_location(self):  #This is from Servo Motor readings after checking that servos are not moving
         current_location = [0,0,0,0,0]
         for i in range(1,5,1):
-            current_location[i] = self.finger_current_position(i)
+            current_location[i] = self.servo_current_position(i)
         return current_location
 
     def is_finger_within_limit(self, id, new_position):
@@ -166,7 +168,7 @@ class reflex_sf():
             my_logger.debug("Finger{} joint rotation mode: {} unknown",format(rotation_mode))
             return 0
 
-    def finger_current_position(self,id):           # checks if the servo is moving - More expensive
+    def servo_current_position(self,id):           # checks if the servo is moving - More expensive
         while (self.finger[id]["servo"].is_moving()):
             pass
         p = self.finger[id]["servo"].read_current_position()
@@ -228,12 +230,12 @@ class reflex_sf():
     def manual_move_finger_to_position(self,servo_id, move_direction):
         increment = CALIBRATION_TICKS
         self.manual_move_finger_delta(servo_id,move_direction,increment)
-        p = self.finger_current_position(sid)
+        p = self.servo_current_position(sid)
         self.finger[servo_id]["CP"] = p
 
     def manual_move_finger_delta(self, id, move_direction,increment): # direction +1 = finger closing; -1 = finger opening
         #p = self.finger[id]["CP"]
-        p = self.finger_current_position(id)
+        p = self.servo_current_position(id)
         my_logger.debug('Finger {} MoveFrom: {}'.format(id,p))
         q = self.finger[id]["rotation"]
         q *= move_direction
@@ -246,7 +248,7 @@ class reflex_sf():
             #self.finger[id]["CP"] = move_to     # new_position when out of bounds will be modified. Therefore
         return move_to
 
-    def move_to_rest_position(self):
+    def move_to_rest_position(self):        # checks where the servos are and sets goal positions = starting values
         current_position = self.read_servo_current_location()
         for i in range(1,5,1):
             rest_position = self.finger[i]["lower_limit"]
@@ -421,14 +423,16 @@ if __name__ == '__main__':
     Buttons = []
     Num_Buttons = j_device.buttons
 
-    min_val = [-JOY_DEADZONE_A0,-JOY_DEADZONE_A1,0,0]
-    max_val = [JOY_DEADZONE_A0,JOY_DEADZONE_A1,0,0]
+    min_val = [-JOY_DEADZONE_A0,-JOY_DEADZONE_A1,-0.5,-0.5]
+    max_val = [JOY_DEADZONE_A0,JOY_DEADZONE_A1,0.5,0.5]
 
     Num_Axes = j_device.axes
     Num_Hats =j_device.hats
 
-    A3_palm_position_reporting = REPORT_PALM_POSITIONS #while using Joystick A3 = 1, we want only one print out
+    A2_palm_position_reporting = REPORT_PALM_POSITIONS #while using Joystick A2 = 1, we want only one print out
+    A3_set_object_id = SET_OBJECT_ID_FLAG # We are using Joystick A3 - flip it go to -ive and come back
     old_datafile = ""                         #to close previous data file
+    object_position = 0
 
     for i in range (Num_Buttons):
         Buttons.append(0)
@@ -534,7 +538,7 @@ if __name__ == '__main__':
                 my_logger.debug("Hat value: {}".format(str(Hat)))
                 my_logger.info("Hat[0] {} and Hat[1] {} ".format(Hat[0],Hat[1]))
                 if Hat[1] == -1:     #Flicking Hat away from you for a new ycb object
-                    my_ycb_object = cd.ycb_object_dataset(my_dataset)
+                    pass
                 if Hat[0] == -1:
                     if my_dataset.empty:
                         my_logger.debug("No YCB object")
@@ -544,23 +548,14 @@ if __name__ == '__main__':
                         one_datafile = cd.data(my_ycb_object)
                         finger_file = one_datafile.filename
                         old_datafile = finger_file
-                        my_logger.info("*****Data file for Grabber Finger positions {}:".format(finger_file))
-
-                        one_datafile.write_data_file("Data file: "+finger_file+"\n")
+                        my_logger.info("*****Data file {} for position {}:".format(finger_file, object_position))
+                        object_position += 1
+                        one_datafile.write_data_file("Data file: {}\n".format(finger_file))
                         palm.move_to_rest_position()
                         set_record = 1
-
-                        t1 = datetime.now()
                         F = palm.get_palm_current_position()
-                        t2 = datetime.now()
-                        t = (t2-t1)
-                        my_logger.info("Time T1: {} T2: {} Diff s:{} microsecond:{} "\
-                                       .format(t1,t2,t.seconds,t.microseconds))
-
                         my_logger.info("Finger Rest Positions F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
-                        one_datafile.write_data_file("Start position\n")
-                        one_datafile.write_data_file("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+\
-                                                     ",F4-"+str(F[2])+"\n")
+                        one_datafile.write_data_file("Starting position: {}\n".format(F))
                         if my_cam.camera == 1:
                             if my_cam.capture_and_save_frame(finger_file) == 0:
                                 my_logger.info("Camera read of image file write failure : ".format(finger_file))
@@ -573,11 +568,10 @@ if __name__ == '__main__':
                     if set_record == 1:
                         F = palm.get_palm_current_position()
                         my_logger.info("Grabber position F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
-                        one_datafile.write_data_file("End position\n")
-                        one_datafile.write_data_file("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
+                        one_datafile.write_data_file("Ending Goal position: {}\n".format(F))
                         F = palm.read_servo_current_location()
                         my_logger.info("Servo position M1-{} M2-{} M3-{} M4-{}".format(F[1],F[2],F[3],F[4]))
-                        one_datafile.write_data_file("M1-"+ str(F[1])+",M2-"+str(F[2])+",M3-"+ str(F[3])+",M4-"+str(F[2])+"\n")
+                        one_datafile.write_data_file("End Servo Positions: {}\n".format(F))
                         set_record = 0
                         my_command.stop_collecting()
                     else:
@@ -591,69 +585,81 @@ if __name__ == '__main__':
             if Axes[k] > 0:
                 if Axes[k] > max_val[k]:
                     direction[k] = 1
-                    move_goal[k] = int(Axes[k]*MOVE_TICKS)
                     if k == 1:
+                        move_goal[k] = int(Axes[k]*MOVE_TICKS)
                         joy_move[1] = 1
                     elif k == 0:
+                        move_goal[k] = int(Axes[k]*MOVE_TICKS_SERVO4)
                         joy_move[0] = 1
-                    elif k == 3:
-                        if A3_palm_position_reporting:
+                    elif k == 2:
+                        if A2_palm_position_reporting:
                             F = palm.get_rest_position()
                             my_logger.info("Rest Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
                             F = palm.get_palm_current_position()
                             my_logger.info("Current Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
                             F= palm.get_max_position()
                             my_logger.info("Max Position F1-{}, F2-{}, F3-{}, F4-{}".format(F[1],F[2],F[3],F[4]))
-                            A3_palm_position_reporting = 0
+                            A2_palm_position_reporting = 0
                         else:
                             pass    # not logging A3_palm_position
-                    else:
-                        pass    # end of checking k values (0,1,3) for positive displacement
+                    elif k == 3:
+                        if A3_set_object_id:
+                            my_ycb_object = cd.ycb_object_dataset(my_dataset)
+                            object_position = 0
+                            A3_set_object_id = 0
+                        else:
+                            pass
             elif Axes[k] < 0:
                 if Axes[k] < min_val[k]:
                     direction[k] = -1
-                    move_goal[k] = int(abs(Axes[k])*MOVE_TICKS)
                     if k == 1:
-                        joy_move[1]=1
+                        move_goal[k] = int(abs(Axes[k])*MOVE_TICKS)
+                        joy_move[1] = 1
                     elif k == 0:
-                        joy_move[0]=1
-                    elif k==3:
-                        palm_position_reporting = 1
-                    else:
-                        pass # end of checking k values (0,1,3) for negative displacement
+                        move_goal[k] = int(abs(Axes[k])*MOVE_TICKS_SERVO4)
+                        joy_move[0] = 1
+                    elif k == 2:
+                        A2_palm_position_reporting = 1
+                    elif k == 3:
+                        A3_set_object_id = 1
             else:
                 pass
         # Joystick time is after calculating the displacement
         this_joy_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
         my_data_elements.set_time(joystick_value_ts = this_joy_ts)
 
-        # Joystick Axis k = 1 for moving Servo 1,2,3
+        # Joystick Axis k = 1 for moving Servo 1,2,3  k = 0   #  Servo 4
         M = palm.get_palm_current_position()
-        if joy_move[1] == 1:
-            joy_move[1] = 0
-            my_logger.info("Joy Axis displacement: {}, Direction: {}, M1-M2-M3 moveby: {}".
-                           format(Axes[1], direction[1], move_goal[1]))
-            M = palm.grip_fingers(move_goal[1],direction[1]) # should contain zero value for 0 and 4 in the List
-            my_data_elements.joystick_1 = Axes[1]
-
-        k = 0   #Servo 4
-        if joy_move[0] == 1:
-            joy_move[0] = 0
-            my_logger.info("Joy Axis displacement: {}, Direction: {}, M4 moveby: {}".
-                           format(Axes[0], direction[0], move_goal[0]))
-            my_data_elements.joystick_1 = Axes[0]
-            M[4] = palm.space_finger1_and_finger2(move_goal[0],direction[0])
         this_gp_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
-        my_data_elements.set_time(gp_ts = this_gp_ts)
-        my_data_elements.set_position_gp(M)
+        if joy_move[1] == 1:
+            M = palm.grip_fingers(move_goal[1],direction[1]) # M should contain zero value for 0 and 4 in the List
+
+        if joy_move[0] == 1:
+            M[4] = palm.space_finger1_and_finger2(move_goal[0],direction[0])
 
 
-        #M = palm.read_servo_current_location() # inaccurate Servo positions at best
-        this_cp_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
-        my_data_elements.set_time(cp_ts = this_cp_ts)
-        #my_data_elements.set_position_gp(M)
-        if old_datafile:
-            my_data_elements.write_to_file(one_datafile)
+        # If the fingers moved record data_elements
+
+        if (joy_move[0] or joy_move[1]):
+            my_data_elements.joystick_1 = Axes[1]
+            my_data_elements.joystick_0 = Axes[0]
+            my_data_elements.set_time(gp_ts = this_gp_ts)
+            my_data_elements.set_position_gp(M)
+            if joy_move[1] == 1:
+                my_logger.info("Joy Axis displacement: {}, Direction: {}, M1-M2-M3 moveby: {}".
+                           format(Axes[1], direction[1], move_goal[1]))
+                joy_move[1] = 0
+            if joy_move[0] == 1:
+                my_logger.info("Joy Axis displacement: {}, Direction: {}, M4 moveby: {}".
+                           format(Axes[0], direction[0], move_goal[0]))
+                joy_move[0] = 0
+
+            #M = palm.read_servo_current_location() # inaccurate Servo positions at best
+            this_cp_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+            my_data_elements.set_time(cp_ts = this_cp_ts)
+            #my_data_elements.set_position_gp(M)
+            if set_record:
+                my_data_elements.write_to_file(one_datafile)
 
         textPrint.Screenprint(screen, "Joystick name: {}".format(j_device.name))
         textPrint.Yspace()

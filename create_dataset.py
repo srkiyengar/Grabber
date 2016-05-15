@@ -55,8 +55,8 @@ class ycb_object_dataset:
         creation_time = time.strftime("%d-%b-%Y %H:%M:%S", time.localtime())
         self.object_id = my_dataset.get_object_id()
         self.batch = my_dataset.data_batch
-        my_logger.info("*******Inserted {} Batch: {} object: {} ************".format(creation_time,
-                                                                    self.batch,self.object_id))
+        my_logger.info("*******Batch: {} At {} Created object: {} ************".format(self.batch, creation_time,
+                                                                    self.object_id))
         self.file_counter = 0
         my_dataset.append(self)
 
@@ -141,7 +141,7 @@ class data_elements:
         return self.current_position
 
     def write_to_file(self,my_data):
-        write_str = "{},{},{},{},{},{},,{},{}".format(self.loop_ts,self.joystick_value_ts,self.joystick_0,self.joystick_1,\
+        write_str = "{},{},{},{},{},{},,{},{}\n".format(self.loop_ts,self.joystick_value_ts,self.joystick_0,self.joystick_1,\
                         self.gp_ts,self.goal_position,self.cp_ts,self.current_position)
         my_data.write_data_file(write_str)
 
