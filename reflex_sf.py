@@ -20,7 +20,7 @@ JOY_DEADZONE_A1 = 0.1
 SCAN_RATE = 100           #1 second divided by scan rate is t he joystick scanning
 POS_ERROR = 20
 
-MOVE_TICKS = 250
+MOVE_TICKS = 350
 CALIBRATION_TICKS = 50
 
 
@@ -71,7 +71,7 @@ class reflex_sf():
             temp = j.read_temperature()
             resol = j.read_resolution_divider()
             current_pos = j.read_current_position()
-            goal_pos = j.get_goal_position()
+            # goal_pos = j.get_goal_position()
             offset = j.read_offset()
             speed = MAX_SPEED
             j.set_speed(speed)
@@ -90,8 +90,15 @@ class reflex_sf():
 
             max_torque = j.read_max_torque()
             set_torque = j.read_set_torque()
+
+            # Current position below is not servo current position (cp). It is the last goal position set.
+            # Now and then the current position of servo will be updated but the value will be different from cp if
+            # the servo is moving (less for M1 and M3 and more for M2 and M4. While moving with Joystick, measuring the
+            # cp properly (waiting for servo to not move) will make the finger movements jerky or sequential due to the
+            # cost of time for measurement.
+
             finger_parameters = {"servo":j, "temperature": temp, "resolution_divider": resol, "initial_position": current_pos,
-                                 "goal_position":goal_pos,"multi_turn_offset":offset, "moving_speed":speed, "direction": 1,
+                                 "multi_turn_offset":offset, "moving_speed":speed, "direction": 1,
                                  "lower_limit":l_limits[i],"upper_limit":u_limits[i],"rotation":joint_state,
                                  "max_torque":max_torque, "set_torque":set_torque, "CP":current_pos}
             self.finger.append(finger_parameters)
@@ -119,13 +126,13 @@ class reflex_sf():
         return 1
 
 
-    def get_palm_current_position(self): #Returns a list of current position
+    def get_palm_current_position(self): #Returns a list of current position from palm object
         current_position = [0,0,0,0,0]
         for i in range(1,5,1):
             current_position[i] = self.finger[i]["CP"]
         return current_position
 
-    def read_servo_current_location(self):
+    def read_servo_current_location(self):  #This is from Servo Motor readings without testing if they are moving
         current_location = [0,0,0,0,0]
         for i in range(1,5,1):
             current_location[i] = self.finger_current_position(i)
@@ -159,7 +166,7 @@ class reflex_sf():
             my_logger.debug("Finger{} joint rotation mode: {} unknown",format(rotation_mode))
             return 0
 
-    def finger_current_position(self,id):
+    def finger_current_position(self,id):           # checks if the servo is moving - More expensive
         while (self.finger[id]["servo"].is_moving()):
             pass
         p = self.finger[id]["servo"].read_current_position()
@@ -190,14 +197,15 @@ class reflex_sf():
                 ('Outside Limit Finger{} - Denied: Move From Position {} to Position {}'.format(id,p,new_position))
             return 0
 
-    def grip_fingers(self, move_by, grip, recording=None, file_pointer=None):
+    def grip_fingers(self, move_by, grip):
+        F = [0,0,0,0,0]
         if grip == 1:
             my_logger.info('Tighten by {} '.format(move_by))
         elif grip == -1:
             my_logger.info('Loosen by {} '.format(move_by))
 
         for i in range(1,4,1):
-            self.move_finger_delta(i,grip,move_by)
+            F[i] = self.move_finger_delta(i,grip,move_by)
 
         #updating CP to match current position
         #for i in range(1,4,1):
@@ -206,20 +214,16 @@ class reflex_sf():
             #q = self.finger_current_position(i)
             #my_logger.debug('Finger {} should at {} and it is at {}'.format(i,p,q))
             #self.finger[i]["CP"] = q
+        # F = self.get_palm_current_position()
+        return F # returning where it the fingers are supposed to move - others are zero
 
-        if recording is not None:
-            F = self.get_palm_current_position()
-            file_pointer.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
-
-    def space_finger1_and_finger2(self, move_by, grip,recording=None, file_pointer=None):
+    def space_finger1_and_finger2(self, move_by, grip):
         if grip == 1:
             my_logger.info('Spread finger 1 and 3 by {}'.format(move_by))
         elif grip == -1:
             my_logger.info('Bring finger 1 and 3 closer by {}'.format(move_by))
-        self.move_finger_delta(4,grip,move_by)
-        if recording is not None:
-            F = self.get_palm_current_position()
-            file_pointer.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
+        P = self.move_finger_delta(4,grip,move_by)
+        return P
 
     def manual_move_finger_to_position(self,servo_id, move_direction):
         increment = CALIBRATION_TICKS
@@ -376,13 +380,34 @@ if __name__ == '__main__':
 
     for m in range(1,6,1):
         my_logger.info("Attempt # {}".format(m))
-        before_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        before_time = datetime.now()
+        before_time_str = before_time.strftime("%Y-%m-%d-%H-%M-%S-%f")
         response_str = my_command.exchange_time(before_time_str)
-        after_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        after_time = datetime.now()
+        after_time_str = after_time.strftime("%Y-%m-%d-%H-%M-%S-%f")
         my_logger.info("Before Laptop Time: {}".format(before_time_str))
         my_logger.info("Desktop Response: {}".format(response_str))
         my_logger.info("After Laptop Time: {}".format(after_time_str))
 
+    Laptop_ts, Labview_ts = response_str.split("S")
+    Labview1, Labview2 = Labview_ts.split(".")
+    Labview_ts = Labview1 +"-" + Labview2
+    Desktop_time = datetime.strptime(Labview_ts,"%Y-%m-%d-%H-%M-%S-%f")
+    transit_time = after_time - before_time
+    transit_time_ms = (1000000*transit_time.seconds)+(transit_time.microseconds)
+
+    if transit_time_ms < 2000:
+        if Desktop_time > after_time:
+            delta = Desktop_time - after_time
+            difference = (1000000*delta.seconds)+(delta.microseconds)
+        else:
+            delta = after_time - Desktop_time
+            difference = -((1000000*delta.seconds)+(delta.microseconds))
+        my_logger.info("Clock Difference (+ive means Desktop is ahead): {}".format(difference))
+        my_dataset.set_clock_difference(difference)
+    else:
+        my_logger.info("Clock Difference cannot be computed as transit time (micros): {} above 2ms".format(transit_time_ms))
+        raise RuntimeError('Transit Time in milliseconds too high to sync clock', (transit_time_ms/1000),'\n')
 
 
     # Used to manage how fast the screen updates
@@ -424,6 +449,9 @@ if __name__ == '__main__':
     while done==False:
         screen.fill(WHITE)
         textPrint.reset()
+        my_data_elements = cd.data_elements()
+        this_loop_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        my_data_elements.set_time(loop_ts = this_loop_ts)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 done = True
@@ -511,19 +539,14 @@ if __name__ == '__main__':
                     if my_dataset.empty:
                         my_logger.debug("No YCB object")
                     else:
+                        if old_datafile: #closing the previous data file before starting the next
+                            one_datafile.close_data_file()
                         one_datafile = cd.data(my_ycb_object)
                         finger_file = one_datafile.filename
+                        old_datafile = finger_file
                         my_logger.info("*****Data file for Grabber Finger positions {}:".format(finger_file))
-                        if old_datafile: #closing the previous data file before starting the next
-                            finger_file_fp.close()
-                        try:
-                            finger_file_fp = open(one_datafile.filename,"w")
-                            old_datafile = finger_file
-                        except IOError:
-                            my_logger.info("Failure to File {}:".format(finger_file))
-                            raise IOError ("Unable to open file for Grabber Finger position recording")
 
-                        finger_file_fp.write("Data file: "+finger_file+"\n")
+                        one_datafile.write_data_file("Data file: "+finger_file+"\n")
                         palm.move_to_rest_position()
                         set_record = 1
 
@@ -535,8 +558,9 @@ if __name__ == '__main__':
                                        .format(t1,t2,t.seconds,t.microseconds))
 
                         my_logger.info("Finger Rest Positions F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
-                        finger_file_fp.write("Start position\n")
-                        finger_file_fp.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
+                        one_datafile.write_data_file("Start position\n")
+                        one_datafile.write_data_file("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+\
+                                                     ",F4-"+str(F[2])+"\n")
                         if my_cam.camera == 1:
                             if my_cam.capture_and_save_frame(finger_file) == 0:
                                 my_logger.info("Camera read of image file write failure : ".format(finger_file))
@@ -549,11 +573,11 @@ if __name__ == '__main__':
                     if set_record == 1:
                         F = palm.get_palm_current_position()
                         my_logger.info("Grabber position F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
-                        finger_file_fp.write("End position\n")
-                        finger_file_fp.write("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
+                        one_datafile.write_data_file("End position\n")
+                        one_datafile.write_data_file("F1-"+ str(F[1])+",F2-"+str(F[2])+",F3-"+ str(F[3])+",F4-"+str(F[2])+"\n")
                         F = palm.read_servo_current_location()
                         my_logger.info("Servo position M1-{} M2-{} M3-{} M4-{}".format(F[1],F[2],F[3],F[4]))
-                        finger_file_fp.write("M1-"+ str(F[1])+",M2-"+str(F[2])+",M3-"+ str(F[3])+",M4-"+str(F[2])+"\n")
+                        one_datafile.write_data_file("M1-"+ str(F[1])+",M2-"+str(F[2])+",M3-"+ str(F[3])+",M4-"+str(F[2])+"\n")
                         set_record = 0
                         my_command.stop_collecting()
                     else:
@@ -599,27 +623,37 @@ if __name__ == '__main__':
                         pass # end of checking k values (0,1,3) for negative displacement
             else:
                 pass
+        # Joystick time is after calculating the displacement
+        this_joy_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        my_data_elements.set_time(joystick_value_ts = this_joy_ts)
 
-        k = 1   #Servo 1,2,3
-        if joy_move[k] == 1:
-            joy_move[k] = 0
+        # Joystick Axis k = 1 for moving Servo 1,2,3
+        M = palm.get_palm_current_position()
+        if joy_move[1] == 1:
+            joy_move[1] = 0
             my_logger.info("Joy Axis displacement: {}, Direction: {}, M1-M2-M3 moveby: {}".
-                           format(Axes[k], direction[k], move_goal[k]))
-            if old_datafile:
-                palm.grip_fingers(move_goal[k],direction[k],set_record,finger_file_fp)
-            else:
-                palm.grip_fingers(move_goal[k],direction[k])
+                           format(Axes[1], direction[1], move_goal[1]))
+            M = palm.grip_fingers(move_goal[1],direction[1]) # should contain zero value for 0 and 4 in the List
+            my_data_elements.joystick_1 = Axes[1]
 
         k = 0   #Servo 4
-        if joy_move[k] == 1:
-            joy_move[k] = 0
+        if joy_move[0] == 1:
+            joy_move[0] = 0
             my_logger.info("Joy Axis displacement: {}, Direction: {}, M4 moveby: {}".
-                           format(Axes[k], direction[k], move_goal[k]))
-            if old_datafile:
-                palm.space_finger1_and_finger2(move_goal[k],direction[k],set_record,finger_file_fp)
-            else:
-                palm.space_finger1_and_finger2(move_goal[k],direction[k])
+                           format(Axes[0], direction[0], move_goal[0]))
+            my_data_elements.joystick_1 = Axes[0]
+            M[4] = palm.space_finger1_and_finger2(move_goal[0],direction[0])
+        this_gp_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        my_data_elements.set_time(gp_ts = this_gp_ts)
+        my_data_elements.set_position_gp(M)
 
+
+        #M = palm.read_servo_current_location() # inaccurate Servo positions at best
+        this_cp_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        my_data_elements.set_time(cp_ts = this_cp_ts)
+        #my_data_elements.set_position_gp(M)
+        if old_datafile:
+            my_data_elements.write_to_file(one_datafile)
 
         textPrint.Screenprint(screen, "Joystick name: {}".format(j_device.name))
         textPrint.Yspace()
@@ -654,7 +688,7 @@ if __name__ == '__main__':
 my_cam.close_video()
 pygame.quit ()
 if old_datafile:        #when no batch is created, the program won't try to close a non-existant file handle
-    finger_file_fp.close()
+    one_datafile.close_data_file()
 my_command.destroy()    #close socket
 
 
