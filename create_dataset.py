@@ -55,6 +55,7 @@ class ycb_object_dataset:
         creation_time = time.strftime("%d-%b-%Y %H:%M:%S", time.localtime())
         self.object_id = my_dataset.get_object_id()
         self.batch = my_dataset.data_batch
+        self.clock_diff = my_dataset.clock_difference
         my_logger.info("*******Batch: {} At {} Created object: {} ************".format(self.batch, creation_time,
                                                                     self.object_id))
         self.file_counter = 0
@@ -73,7 +74,9 @@ class ycb_object_dataset:
         d = self.file_counter
         id = STARTING_FILE_NUMBER+d
         self.file_counter = d + 1
-        return id;
+        return id
+    def get_clock_difference(self):
+        return self.clock_diff
 
 class data:
 
@@ -82,6 +85,8 @@ class data:
         self.batch = my_ycb_object_dataset.get_batch()
         self.ycb_object = my_ycb_object_dataset.get_ycb_object()
         self.filename = str(self.batch)+"-"+str(self.ycb_object)+"-"+str(self.filenumber)
+        self.clock_difference = my_ycb_object_dataset.get_clock_difference()
+
         try:
             data_file_fp = open(self.filename,"w")
         except IOError:
@@ -141,7 +146,7 @@ class data_elements:
         return self.current_position
 
     def write_to_file(self,my_data):
-        write_str = "{},{},{},{},{},{},,{},{}\n".format(self.loop_ts,self.joystick_value_ts,self.joystick_0,self.joystick_1,\
+        write_str = "{},{},{},{},{},{},{},{}\n".format(self.loop_ts,self.joystick_value_ts,self.joystick_0,self.joystick_1,\
                         self.gp_ts,self.goal_position,self.cp_ts,self.current_position)
         my_data.write_data_file(write_str)
 

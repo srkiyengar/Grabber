@@ -72,7 +72,7 @@ class reflex_sf():
                 raise RuntimeError('Connection to Servo failure for servo number', i,'\n')
             temp = j.read_temperature()
             resol = j.read_resolution_divider()
-            current_pos = j.read_current_position()
+            current_pos = j.read_current_position() # This is OK as the servo is at rest
             # goal_pos = j.get_goal_position()
             offset = j.read_offset()
             speed = MAX_SPEED
@@ -94,15 +94,14 @@ class reflex_sf():
             set_torque = j.read_set_torque()
 
             # Current position below is not servo current position (cp). It is the last goal position set.
-            # Now and then the current position of servo will be updated but the value will be different from cp if
-            # the servo is moving (less for M1 and M3 and more for M2 and M4. While moving with Joystick, measuring the
-            # cp properly (waiting for servo to not move) will make the finger movements jerky or sequential due to the
-            # cost of time for measurement.
+            # Current position is updated whenever a new goal position is set.
+            # Current Location may also be updated by reading but these reads cannot be done by waiting for the servo
+            # to stop moving, while gripping
 
             finger_parameters = {"servo":j, "temperature": temp, "resolution_divider": resol, "initial_position": current_pos,
                                  "multi_turn_offset":offset, "moving_speed":speed, "direction": 1,
                                  "lower_limit":l_limits[i],"upper_limit":u_limits[i],"rotation":joint_state,
-                                 "max_torque":max_torque, "set_torque":set_torque, "CP":current_pos}
+                                 "max_torque":max_torque, "set_torque":set_torque, "CP":current_pos, "CL":current_pos}
             self.finger.append(finger_parameters)
 
     def get_palm_rest_position(self):   #Returns a list of current lower limit
@@ -127,6 +126,11 @@ class reflex_sf():
             my_logger.debug('Finger {} Lower Limit {} -- Upper Limit {}'.format(i,x,y))
         return 1
 
+    def get_palm_current_location(self): #Returns a list of "CL" from palm object
+        current_location = [0,0,0,0,0]
+        for i in range(1,5,1):
+            current_location[i] = self.finger[i]["CL"]
+        return current_location
 
     def get_palm_current_position(self): #Returns a list of current position from palm object
         current_position = [0,0,0,0,0]
@@ -193,6 +197,7 @@ class reflex_sf():
             #my_logger.info('Finger {} - Moving From Position {} to Position {}'.format(id,p,move_to))
             self.finger[id]["servo"].set_goal_position(move_to) # return data to make the program wait
             self.finger[id]["CP"] = move_to     # new_position when out of bounds will be modified. Therefore
+            self.finger[id]["CL"] = self.finger[id]["servo"].read_current_position()
             return move_to
         else:
             my_logger.info\
@@ -232,6 +237,7 @@ class reflex_sf():
         self.manual_move_finger_delta(servo_id,move_direction,increment)
         p = self.servo_current_position(sid)
         self.finger[servo_id]["CP"] = p
+        self.finger[servo_id]["CL"] = p
 
     def manual_move_finger_delta(self, id, move_direction,increment): # direction +1 = finger closing; -1 = finger opening
         #p = self.finger[id]["CP"]
@@ -255,6 +261,7 @@ class reflex_sf():
             my_logger.info("Moving  Servo {} From {} to Rest position {}".format(i, current_position[i],rest_position))
             self.finger[i]["servo"].set_goal_position(rest_position)
             self.finger[i]["CP"] = rest_position
+            self.finger[i]["CL"] = rest_position
         return
 
     def get_rest_position(self):
@@ -510,7 +517,7 @@ if __name__ == '__main__':
                     (fingers[1],fingers[2],fingers[3],fingers[4]))
 
                 elif Buttons[0] == 1:
-                    fingers = palm.get_palm_current_position()
+                    fingers = palm.read_servo_current_location()
                     my_logger.info("Current Finger Positions F1-{} F2-{} F3-{} F4-{}".format
                     (fingers[1],fingers[2],fingers[3],fingers[4]))
                 elif Buttons[4] and Buttons[5]:
@@ -520,7 +527,7 @@ if __name__ == '__main__':
                     except IOError:
                         raise IOError ("Unable to open calibration file")
 
-                    new_limits = palm.get_palm_current_position()
+                    new_limits = palm.read_servo_current_location()
                     palm.set_palm_rest_position(new_limits)
                     my_logger.info("Calibration - New Rest Positions F1-{} F2-{} F3-{} F4 {}".format
                     (new_limits[1],new_limits[2],new_limits[3],new_limits[4]))
@@ -537,13 +544,12 @@ if __name__ == '__main__':
                 Hat = event.dict['value']
                 my_logger.debug("Hat value: {}".format(str(Hat)))
                 my_logger.info("Hat[0] {} and Hat[1] {} ".format(Hat[0],Hat[1]))
-                if Hat[1] == -1:     #Flicking Hat away from you for a new ycb object
-                    pass
                 if Hat[0] == -1:
                     if my_dataset.empty:
                         my_logger.debug("No YCB object")
                     else:
                         if old_datafile: #closing the previous data file before starting the next
+                            my_logger.info("** Closing Data file {}:".format(finger_file))
                             one_datafile.close_data_file()
                         one_datafile = cd.data(my_ycb_object)
                         finger_file = one_datafile.filename
@@ -551,6 +557,10 @@ if __name__ == '__main__':
                         my_logger.info("*****Data file {} for position {}:".format(finger_file, object_position))
                         object_position += 1
                         one_datafile.write_data_file("Data file: {}\n".format(finger_file))
+                        one_datafile.write_data_file(
+                            "Clock Difference in microsecond (+ive means Desktop is ahead: {}\n".format(
+                                one_datafile.clock_difference
+                            ))
                         palm.move_to_rest_position()
                         set_record = 1
                         F = palm.get_palm_current_position()
@@ -654,10 +664,10 @@ if __name__ == '__main__':
                            format(Axes[0], direction[0], move_goal[0]))
                 joy_move[0] = 0
 
-            #M = palm.read_servo_current_location() # inaccurate Servo positions at best
+            M = palm.get_palm_current_location() # inaccurate Servo positions at best
             this_cp_ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
             my_data_elements.set_time(cp_ts = this_cp_ts)
-            #my_data_elements.set_position_gp(M)
+            my_data_elements.set_position_cp(M)
             if set_record:
                 my_data_elements.write_to_file(one_datafile)
 
