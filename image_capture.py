@@ -1,7 +1,8 @@
 __author__ = 'srkiyengar'
 
 
-import cv2
+import pygame
+import pygame.camera
 import os
 import logging
 
@@ -19,43 +20,39 @@ class webcam:
         if focus_type != 0 or focus_type != 1:
             focus_type = 0
         if cam_identifier !=0 and cam_identifier!=1:
-            cam_identifier = 0
-        input_string = "v4l2-ctl -d /dev/video"+str(cam_identifier)+" --set-ctrl focus_auto="+str(focus_type)
+            cam_identifier = 1
+        dev = "/dev/video"+str(cam_identifier)
+        part_command = "v4l2-ctl -d " + dev
+        input_string = part_command +" --set-ctrl focus_auto="+str(focus_type)
         my_logger.info("Setting to manual-focus: {}".format(input_string))
-        if (os.system(input_string) != 0):
-            self.camera = 0
-        else:
+        if os.system(input_string) == 0:
             if focus_type == 0:
-                input_string = "v4l2-ctl -d /dev/video"+str(cam_identifier)+" --set-ctrl focus_absolute="+str(1)
+                input_string = part_command +" --set-ctrl focus_absolute="+str(1)
                 my_logger.info("Focus value: {}".format(input_string))
-                if (os.system(input_string) != 0):
-                    self.camera = 0
-                else:
-                    self.camera = 1
             else:
-                self.camera = 1
+                pass
+            if os.system(input_string) == 0:
+                pygame.camera.init()
+                self.camera = pygame.camera.Camera(dev,(1920,1080))
+                self.camera.start()
+                return
+            else:
+                return None
+        else:
+            return None
+
+
 
 
     def capture_and_save_frame(self,filename):
 
-        capture = cv2.VideoCapture(1)
-        if not capture.isOpened():
-            raise IOError("Unable to open/initialize the camera for video capture")
+        # input_string = "v4l2-ctl -d /dev/video1 --set-fmt-video=width=1920,height=1080,pixelformat=1"
+        # if (os.system(input_string) == 0):
+        cam = self.camera
+        img = cam.get_image()
+        pygame.image.save(img,filename+".png")
 
-        ret, img = capture.read()
-        if not ret:
-            my_logger.info("Camera read failure - no frame")
-            return 0;
-        else:
-            filename = filename+".png"
-            success = cv2.imwrite(filename,img)
-            capture.release()
-            if success:
-                return 1
-            else:
-                my_logger.info("Failure while writing image file {}".format(filename))
-                return 0
 
     def close_video(self):
-        cv2.destroyAllWindows() # Close window
-        #self.camera.release() # Release video device
+        cam = self.camera
+        cam.stop() # Close window

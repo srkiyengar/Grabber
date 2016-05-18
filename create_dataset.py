@@ -116,10 +116,10 @@ class data_elements:
         self.joystick_value_ts = None
         self.joystick_0 = None
         self.joystick_1 = None
-        self.goal_position = [0,0,0,0,0]  # ignore index 0 1 to 4 correspond to servo 1 to 4
+        self.goal_position = "Comma delimited M1,M2,M3,M4"
         self.gp_ts = None
-        self.current_position = [0,0,0,0,0] # ignore index 0 1 to 4 correspond to servo 1 to 4 this is be poor as \
-                                            # servo is moving
+        self.current_position = "Comma delimited M1,M2,M3,M4"  # servo might be moving when this value is taken
+
         self.cp_ts = None
 
     def set_time(self, loop_ts=None, joystick_value_ts = None, gp_ts = None, cp_ts = None):
@@ -134,13 +134,15 @@ class data_elements:
             self.cp_ts = cp_ts
 
     def set_position_gp(self, gp):
-        self.goal_position = gp
+        del gp[0]
+        self.goal_position = str(gp).strip("[]")
 
     def get_position_gp(self):
         return self.goal_position
 
     def set_position_cp(self,cp):
-        self.current_position = cp
+        del cp[0]
+        self.current_position = str(cp).strip("[]")
 
     def get_position_gp(self):
         return self.current_position

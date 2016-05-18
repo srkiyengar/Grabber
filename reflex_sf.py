@@ -20,15 +20,15 @@ JOY_DEADZONE_A1 = 0.1
 SCAN_RATE = 100           #1 second divided by scan rate is t he joystick scanning
 POS_ERROR = 20
 
-MOVE_TICKS = 250
-MOVE_TICKS_SERVO4 = 150
+MOVE_TICKS = 200
+MOVE_TICKS_SERVO4 = 100
 CALIBRATION_TICKS = 50
 
 
 MAX_FINGER_MOVEMENT = 2300
 MAX_PRESHAPE_MOVEMENT = 1550
 
-MAX_SPEED = 200 # A max speed of 1023 is allowed
+MAX_SPEED = 150 # A max speed of 1023 is allowed
 
 REPORT_PALM_POSITIONS = 1  #To report finger positions using A3 movement of joystick
 SET_OBJECT_ID_FLAG = 1 # using Axis 2 of Joystick
@@ -566,13 +566,7 @@ if __name__ == '__main__':
                         F = palm.get_palm_current_position()
                         my_logger.info("Finger Rest Positions F1-{} F2-{} F3-{} F4-{}".format(F[1],F[2],F[3],F[4]))
                         one_datafile.write_data_file("Starting position: {}\n".format(F))
-                        if my_cam.camera == 1:
-                            if my_cam.capture_and_save_frame(finger_file) == 0:
-                                my_logger.info("Camera read of image file write failure : ".format(finger_file))
-                            else:
-                                my_logger.info("Image file created :{}"+".png".format(finger_file))
-                        else:
-                            my_logger.info("Camera setting failure : ".format(finger_file))
+                        my_cam.capture_and_save_frame(finger_file)
                         my_command.start_collecting(finger_file)
                 if Hat[0] == 1:
                     if set_record == 1:
