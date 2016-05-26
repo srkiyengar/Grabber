@@ -414,6 +414,7 @@ if __name__ == '__main__':
             difference = -((1000000*delta.seconds)+(delta.microseconds))
         my_logger.info("Clock Difference (+ive means Desktop is ahead): {}".format(difference))
         my_dataset.set_clock_difference(difference)
+        my_dataset.set_transit_time(transit_time_ms)
     else:
         my_logger.info("Clock Difference cannot be computed as transit time (micros): {} above 2ms".format(transit_time_ms))
         raise RuntimeError('Transit Time in milliseconds too high to sync clock', (transit_time_ms/1000),'\n')
@@ -557,6 +558,8 @@ if __name__ == '__main__':
                         my_logger.info("*****Data file {} for position {}:".format(finger_file, object_position))
                         object_position += 1
                         one_datafile.write_data_file("Data file: {}\n".format(finger_file))
+                        one_datafile.write_data_file("Total transit time is +ive if Desktop is ahead: {}\n".format(
+                            one_datafile.transit_time))
                         one_datafile.write_data_file(
                             "Clock Difference in microsecond (+ive means Desktop is ahead: {}\n".format(
                                 one_datafile.clock_difference

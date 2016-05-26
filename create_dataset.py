@@ -31,6 +31,7 @@ class dataset:
         self.counter = 0
         self.empty = 1
         self.clock_difference = None
+        self.transit_time = None
 
     def append(self,ycb_object_dataset):
         self.data.append(ycb_object_dataset)
@@ -46,6 +47,10 @@ class dataset:
         # positive clock difference means that the Labview data is ahead of Grabber time (microseconds)
         self.clock_difference = clock_difference
 
+    def set_transit_time(self,transit_time):
+        # The total time to send a command to LAbview machine and get a response to synchronize the clocks
+        self.transit_time = transit_time
+
 
 class ycb_object_dataset:
 
@@ -56,6 +61,8 @@ class ycb_object_dataset:
         self.object_id = my_dataset.get_object_id()
         self.batch = my_dataset.data_batch
         self.clock_diff = my_dataset.clock_difference
+        self.transit_time = my_dataset.transit_time
+
         my_logger.info("*******Batch: {} At {} Created object: {} ************".format(self.batch, creation_time,
                                                                     self.object_id))
         self.file_counter = 0
@@ -78,6 +85,9 @@ class ycb_object_dataset:
     def get_clock_difference(self):
         return self.clock_diff
 
+    def get_transit_time(self):
+        return self.transit_time
+
 class data:
 
     def __init__(self, my_ycb_object_dataset):
@@ -86,6 +96,8 @@ class data:
         self.ycb_object = my_ycb_object_dataset.get_ycb_object()
         self.filename = str(self.batch)+"-"+str(self.ycb_object)+"-"+str(self.filenumber)
         self.clock_difference = my_ycb_object_dataset.get_clock_difference()
+        self.transit_time = my_ycb_object_dataset.get_transit_time()
+
 
         try:
             data_file_fp = open(self.filename,"w")

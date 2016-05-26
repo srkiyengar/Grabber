@@ -90,6 +90,7 @@ class command_labview:
             format_str = "BB"+str(l)+"s"
             start_str = struct.pack(format_str,7,l,filename)
             self.my_connection.send_data(start_str)
+            my_logger.info("Sent Command to NDI to Start Collecting for {}".format(filename))
 
         def stop_collecting(self):
             if self.datafile:
@@ -97,6 +98,7 @@ class command_labview:
                 format_str = "BB"+str(l)+"s"
                 stop_str = struct.pack(format_str,5,l,self.datafile)
                 self.my_connection.send_data(stop_str)
+                my_logger.info("Sent Command to NDI to Stop Collecting for {}".format(self.datafile))
 
         def stop__labview_recording(self):
             filename = "dummy"
